@@ -1,101 +1,247 @@
-import Image from "next/image";
+'use client'
+
+import { DragDropContext } from '@hello-pangea/dnd'
+import { useEffect, useState } from 'react'
+import { TaskColumn } from './components/TaskColumn'
+import { ThemeToggle } from './components/ThemeToggle'
+import { ProgressOverview } from './components/ProgressOverview'
+
+interface Task {
+  id: string
+  title: string
+  description?: string | null
+  content?: string | null
+  learnings?: string | null
+  status: string
+  type: string
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [newTask, setNewTask] = useState({
+    title: '',
+    description: '',
+    type: 'MONTHLY',
+  })
+  const [isFormOpen, setIsFormOpen] = useState(false)
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  useEffect(() => {
+    fetchTasks()
+  }, [])
+
+  const fetchTasks = async () => {
+    const response = await fetch('/api/tasks')
+    const data = await response.json()
+    setTasks(data)
+  }
+
+  const handleDragEnd = async (result: any) => {
+    if (!result.destination) return
+
+    const { source, destination, draggableId } = result
+    
+    // If dropped in the same position
+    if (
+      source.droppableId === destination.droppableId &&
+      source.index === destination.index
+    ) {
+      return
+    }
+
+    const updatedTasks = Array.from(tasks)
+    const taskIndex = updatedTasks.findIndex((t) => t.id === draggableId)
+    const task = updatedTasks[taskIndex]
+
+    if (task) {
+      // Remove the task from its position
+      updatedTasks.splice(taskIndex, 1)
+      
+      // Find the index where to insert based on destination
+      const destinationTasks = updatedTasks.filter(t => t.type === destination.droppableId)
+      const insertIndex = updatedTasks.findIndex(t => t.type === destination.droppableId) + destination.index
+      
+      const updatedTask = { ...task, type: destination.droppableId }
+      updatedTasks.splice(insertIndex, 0, updatedTask)
+
+      setTasks(updatedTasks)
+
+      await fetch('/api/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedTask),
+      })
+    }
+  }
+
+  const handleStatusChange = async (id: string, status: string) => {
+    const updatedTasks = tasks.map((task) =>
+      task.id === id ? { ...task, status } : task
+    )
+    setTasks(updatedTasks)
+
+    const task = tasks.find((t) => t.id === id)
+    if (task) {
+      await fetch('/api/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...task, status }),
+      })
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    const updatedTasks = tasks.filter((task) => task.id !== id)
+    setTasks(updatedTasks)
+
+    await fetch(`/api/tasks/${id}`, {
+      method: 'DELETE',
+    })
+  }
+
+  const handleUpdateLearnings = async (id: string, learnings: string) => {
+    const updatedTasks = tasks.map((task) =>
+      task.id === id ? { ...task, learnings } : task
+    )
+    setTasks(updatedTasks)
+
+    const task = tasks.find((t) => t.id === id)
+    if (task) {
+      await fetch('/api/tasks', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...task, learnings }),
+      })
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const response = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...newTask, status: 'TODO' }),
+    })
+    const task = await response.json()
+    setTasks([...tasks, task])
+    setNewTask({ title: '', description: '', type: 'MONTHLY' })
+    setIsFormOpen(false)
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50 dark:from-gray-900 dark:via-[#001a33] dark:to-gray-900 p-8">
+      <ThemeToggle />
+      <ProgressOverview tasks={tasks} />
+      
+      <div className="max-w-[1400px] mx-auto">
+        <div className="flex flex-col items-center mb-12">
+          <h1 className="text-5xl font-bold bg-gradient-to-r from-[#1e70bf] to-[#3498db] bg-clip-text text-transparent mb-4">
+            Task Manager
+          </h1>
+          <p className="text-[#2980b9] dark:text-[#5dade2] mb-8 text-center max-w-2xl">
+            Organize your tasks efficiently. Start with monthly goals, break them down into weekly objectives, and track your daily progress.
+          </p>
+          <button
+            onClick={() => setIsFormOpen(!isFormOpen)}
+            className="px-6 py-3 bg-gradient-to-r from-[#2980b9] to-[#3498db] text-white rounded-full hover:from-[#2471a3] hover:to-[#2980b9] transition-all duration-300 shadow-lg hover:shadow-xl flex items-center space-x-2 transform hover:scale-105"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            <span>{isFormOpen ? '✕ Close Form' : '+ Create New Task'}</span>
+          </button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        {isFormOpen && (
+          <div className="mb-12 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-2xl p-6 shadow-xl max-w-xl mx-auto border border-[#3498db]/20 dark:border-[#3498db]/20">
+            <h2 className="text-xl font-bold mb-4 bg-gradient-to-r from-[#1e70bf] to-[#3498db] bg-clip-text text-transparent">Create New Task</h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Title
+                </label>
+                <input
+                  type="text"
+                  value={newTask.title}
+                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                  placeholder="Enter task title"
+                  className="w-full p-2.5 border rounded-lg dark:bg-gray-700/50 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white/50 backdrop-blur-sm"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={newTask.description}
+                  onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                  placeholder="Describe your task in detail"
+                  className="w-full p-2.5 border rounded-lg dark:bg-gray-700/50 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white/50 backdrop-blur-sm"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Time Frame
+                </label>
+                <select
+                  value={newTask.type}
+                  onChange={(e) => setNewTask({ ...newTask, type: e.target.value })}
+                  className="w-full p-2.5 border rounded-lg dark:bg-gray-700/50 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white/50 backdrop-blur-sm"
+                >
+                  <option value="MONTHLY">Monthly Goal</option>
+                  <option value="WEEKLY">Weekly Objective</option>
+                  <option value="DAILY">Daily Task</option>
+                </select>
+              </div>
+              <div className="flex justify-end space-x-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsFormOpen(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white transition-colors text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-gradient-to-r from-[#2980b9] to-[#3498db] text-white rounded-lg hover:from-[#2471a3] hover:to-[#2980b9] transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105 text-sm"
+                >
+                  Create Task
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <TaskColumn
+              id="MONTHLY"
+              title="Monthly Goals"
+              tasks={tasks}
+              type="MONTHLY"
+              onStatusChange={handleStatusChange}
+              onDelete={handleDelete}
+              onUpdateLearnings={handleUpdateLearnings}
+            />
+            <TaskColumn
+              id="WEEKLY"
+              title="Weekly Objectives"
+              tasks={tasks}
+              type="WEEKLY"
+              onStatusChange={handleStatusChange}
+              onDelete={handleDelete}
+              onUpdateLearnings={handleUpdateLearnings}
+            />
+            <TaskColumn
+              id="DAILY"
+              title="Daily Tasks"
+              tasks={tasks}
+              type="DAILY"
+              onStatusChange={handleStatusChange}
+              onDelete={handleDelete}
+              onUpdateLearnings={handleUpdateLearnings}
+            />
+          </div>
+        </DragDropContext>
+      </div>
     </div>
-  );
+  )
 }
