@@ -27,7 +27,7 @@ A modern task management application built with Next.js that helps you organize 
 
 1. Clone the repository:
 ```bash
-git clone [your-repo-url]
+git clone https://github.com/bitwburak/task-manager.git
 cd task-manager
 ```
 
